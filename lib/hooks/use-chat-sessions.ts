@@ -30,9 +30,9 @@ export function useChatSessions(userId: string) {
     }
   }
 
-  const createSession = async (title: string) => {
+  const createSession = async (title: string, sessionId?: string) => {
     try {
-      const newSession = await apiClient.createChatSession({ title, userId })
+      const newSession = await apiClient.createChatSession({ title, userId, id: sessionId })
 
       // Ensure timestamp is a Date object
       const sessionWithDate = {

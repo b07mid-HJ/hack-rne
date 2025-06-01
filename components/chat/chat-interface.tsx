@@ -16,7 +16,7 @@ import { translations } from "@/lib/translations"
 import { useChatSessions } from "@/lib/hooks/use-chat-sessions"
 import { useChatMessages } from "@/lib/hooks/use-chat-messages"
 import { apiClient } from "@/lib/api-client"
-import type { Language, Reference, ProcessingStep, UserInfo } from "@/lib/types"
+import type { Language, Reference, ProcessingStep, UserInfo, ChatSession } from "@/lib/types"
 import { useRouter, useSearchParams } from "next/navigation"
 
 export default function ChatInterface() {
@@ -24,8 +24,14 @@ export default function ChatInterface() {
   const searchParams = useSearchParams()
   const chatIdFromUrl = searchParams.get("chatId")
   
+  // Generate a random session ID for new chats
+  const generateSessionId = () => `session_${Math.random().toString(36).substring(2, 15)}`
+  
+  // Use this ref to track if we're manually creating a new chat
+  const isCreatingNewChat = useRef(false)
+  
   const [language, setLanguage] = useState<Language>("fr")
-  const [currentChatId, setCurrentChatId] = useState(chatIdFromUrl || "1")
+  const [currentChatId, setCurrentChatId] = useState(chatIdFromUrl || generateSessionId())
   const [user, setUser] = useState<UserInfo | null>(null)
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -59,6 +65,12 @@ export default function ChatInterface() {
 
   // Sync URL chat ID with state
   useEffect(() => {
+    // Skip this effect if we're manually creating a new chat
+    if (isCreatingNewChat.current) {
+      isCreatingNewChat.current = false
+      return
+    }
+    
     const urlChatId = searchParams.get("chatId")
     if (urlChatId) {
       if (urlChatId !== currentChatId) {
@@ -66,13 +78,17 @@ export default function ChatInterface() {
         setShowWelcome(false)
       }
     } else {
-      // If there's no chat ID in the URL, we're in a new chat state
-      // Always reset to new chat state when URL has no chatId
-      setCurrentChatId("")
+      // If there's no chat ID in the URL, generate a new session ID
+      const newSessionId = generateSessionId()
+      setCurrentChatId(newSessionId)
+      
+      // Update URL with the new session ID
+      router.push(`/?chatId=${newSessionId}`, { scroll: false })
+      
       setShowWelcome(true)
       setMessages([])
     }
-  }, [searchParams, currentChatId, setMessages])
+  }, [searchParams, currentChatId, setMessages, router])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -120,20 +136,16 @@ export default function ChatInterface() {
     setError("")
 
     try {
-      // If we don't have a current chat ID, create a new chat session first
+      // Use the current chat ID for the API call
       let chatId = currentChatId;
-      if (!chatId) {
-        // Create a new chat session only when the first message is sent
-        const newSession = await createSession(t.legalAssistant)
-        chatId = newSession.id
-        setCurrentChatId(chatId)
-        
-        // Update URL with new chat ID
-        router.push(`/?chatId=${chatId}`)
+      
+      // Update the chat session if needed
+      if (!sessions.some((session: ChatSession) => session.id === chatId)) {
+        await createSession(t.legalAssistant, chatId)
       }
-
-      await simulateProcessingSteps()
       await sendMessage(input, user.id)
+      await simulateProcessingSteps()
+      
       setInput("")
     } catch (err) {
       setError(err instanceof Error ? err.message : t.error)
@@ -168,7 +180,7 @@ export default function ChatInterface() {
         userId: user.id,
         language,
       })
-
+      
       setMessages((prev) => [...prev, aiResponse])
     } catch (err) {
       setError(err instanceof Error ? err.message : t.error)
@@ -186,15 +198,23 @@ export default function ChatInterface() {
     if (!user) return
 
     try {
-      // Instead of creating a session immediately, just clear the current chat ID
-      // and show the welcome screen. We'll create the actual chat when a message is sent.
-      setCurrentChatId("")
+      // Set flag to prevent useEffect from overriding our welcome screen
+      isCreatingNewChat.current = true
       
-      // Update URL without a chat ID
-      router.push(`/`)
+      // Generate a new session ID for the new chat
+      const newSessionId = generateSessionId()
       
+      // Clear messages first
       setMessages([])
+      
+      // Show welcome screen before changing URL
       setShowWelcome(true)
+      
+      // Set the new chat ID
+      setCurrentChatId(newSessionId)
+      
+      // Update URL with the new session ID - use replace to avoid adding to history
+      router.replace(`/?chatId=${newSessionId}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create new chat")
     }
@@ -319,9 +339,15 @@ export default function ChatInterface() {
                 onClick={handleSend}
                 disabled={!input.trim() || isLoading}
                 size="sm"
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 rounded-md bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500"
+                className={`absolute right-2 top-1/2 transform -translate-y-1/2 rounded-md ${isLoading 
+                  ? 'bg-blue-400 hover:bg-blue-400' 
+                  : 'bg-blue-600 hover:bg-blue-700'} disabled:bg-gray-200 disabled:text-gray-400 transition-colors duration-200`}
               >
-                <Send className="w-4 h-4" />
+                {isLoading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin opacity-70"></div>
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
               </Button>
             </div>
             <p className="text-xs text-gray-500 mt-2 text-center">{t.disclaimer}</p>

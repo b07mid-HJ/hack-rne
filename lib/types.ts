@@ -30,9 +30,15 @@ export type ProcessingStep = {
   active: boolean
 }
 
+export type NamePair = {
+  arabic: string
+  french: string
+}
+
 export type CompanyNameSuggestion = {
   id: string
   name: string
+  arabicName?: string
   status: "available" | "unavailable"
   feedback?: "up" | "down"
   score?: number

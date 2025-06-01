@@ -71,7 +71,12 @@ export function MessageList({
                       <Card key={suggestion.id} className="border border-gray-200 hover:shadow-md transition-shadow">
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between mb-3">
-                            <h3 className="font-semibold text-gray-900">{suggestion.name}</h3>
+                            <div>
+                              <h3 className="font-semibold text-gray-900">{suggestion.name}</h3>
+                              {suggestion.arabicName && (
+                                <p className="text-sm text-gray-600 font-arabic" dir="rtl">{suggestion.arabicName}</p>
+                              )}
+                            </div>
                             <Badge
                               variant={suggestion.status === "available" ? "default" : "destructive"}
                               className={

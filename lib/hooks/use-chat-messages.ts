@@ -34,7 +34,20 @@ export function useChatMessages(chatId: string) {
 
   const sendMessage = async (content: string, userId: string) => {
     try {
-      // Add user message
+      // Create a temporary user message to display immediately
+      const tempUserMessage: Message = {
+        id: `temp-msg-${Date.now()}`,
+        chatId,
+        type: "user",
+        content,
+        timestamp: new Date(),
+        userId,
+      }
+      
+      // Add the temporary user message to the UI immediately
+      setMessages((prev) => [...prev, tempUserMessage])
+      
+      // Add user message to the backend
       const userMessage = await apiClient.sendMessage({
         chatId,
         type: "user",
@@ -48,9 +61,12 @@ export function useChatMessages(chatId: string) {
         timestamp: userMessage.timestamp instanceof Date ? userMessage.timestamp : new Date(userMessage.timestamp),
       }
 
-      setMessages((prev) => [...prev, userMessageWithDate])
+      // Replace the temporary message with the real one
+      setMessages((prev) => prev.map(msg => 
+        msg.id === tempUserMessage.id ? userMessageWithDate : msg
+      ))
 
-      // Generate AI response
+      // Generate AI response using the real API
       const aiResponse = await apiClient.generateResponse({
         prompt: content,
         chatId,
@@ -68,6 +84,7 @@ export function useChatMessages(chatId: string) {
       return { userMessage: userMessageWithDate, aiResponse: aiResponseWithDate }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message")
+      console.error("Error sending message:", err)
       throw err
     }
   }
